@@ -13,7 +13,7 @@ Automatically removes ads and skips video ad breaks on [ts.kg](https://www.ts.kg
 
 > The extension is not published on the Chrome Web Store, so it is loaded manually as an unpacked extension.
 
-1. **Download** the `ts-kg-extension.zip` file and unzip it to a permanent folder on your computer (don't delete it after installation).
+1. **Download** the `ts-kg-extension.zip` file from [releases](https://github.com/faustest/Ts.kg-Ad-Scroller/releases) and unzip it to a permanent folder on your computer (don't delete it after installation).
 
 2. Open Chrome and navigate to `chrome://extensions/`
 
