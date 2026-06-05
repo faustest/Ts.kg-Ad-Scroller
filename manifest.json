@@ -1,23 +1,18 @@
 {
   "manifest_version": 3,
   "name": "Ts.kg Ad Scroller",
-  "version": "0.14",
-  "description": "Removes ads and skips video ads on ts.kg",
+  "version": "1.0",
+  "description": "Removes ads and skips video ad breaks on ts.kg",
   "permissions": ["scripting", "tabs"],
   "host_permissions": [
     "https://*.ts.kg/*"
   ],
-  "content_scripts": [
-    {
-      "matches": ["https://*.ts.kg/*"],
-      "js": ["content.js"],
-      "run_at": "document_start",
-      "all_frames": false
-    }
-  ],
+  "background": {
+    "service_worker": "background.js"
+  },
   "web_accessible_resources": [
     {
-      "resources": ["waitForKeyElements.js", "pageScript.js"],
+      "resources": ["pageScript.js"],
       "matches": ["https://*.ts.kg/*"]
     }
   ],
