@@ -15,9 +15,7 @@
     ];
 
     const BG_COLOR = '#206e3e';
-    const AD_MAX_DURATION = 60;      // videos shorter than this are ads
-    const SKIP_RETRY_INTERVAL = 200; // ms between retry attempts
-    const SKIP_RETRY_LIMIT = 30;     // give up after 30 * 200ms = 6 seconds
+    const AD_MAX_DURATION = 60;
 
     // --- Helpers ---
     function removeAll(selector) {
@@ -43,41 +41,20 @@
     }
 
     // --- Skip logic ---
-    //
-    // Problem: on slow connections duration() is NaN when 'play' fires.
-    // Solution: retry loop — poll until duration is known, then jump.
-    // Each ad gets its own independent retry loop via a closure over `skipId`,
-    // so when the second ad starts it cancels any leftover timer from the first.
-    //
     function makeSkipper(player) {
-        let timerId = null;
-        let skipId = 0; // incremented on each new skip attempt to cancel stale loops
+        let skippedSrc = null;
 
-        function attempt(id, tries) {
-            if (id !== skipId) return; // stale loop — a newer skip has taken over
+        return function skip() {
+            const src = player.src();
+            if (src && src === skippedSrc) return;
 
             const dur = player.duration();
             const remaining = player.remainingTime();
+            const target = isNaN(remaining) ? dur : remaining;
 
-            if (!isNaN(dur) && dur > 0) {
-                const target = isNaN(remaining) ? dur : remaining;
-                console.log(`[ts.kg] skip attempt ${tries}: jumping to ${target}s / ${dur}s`);
-                player.currentTime(target);
-                return; // done
-            }
-
-            if (tries >= SKIP_RETRY_LIMIT) {
-                console.warn('[ts.kg] skip gave up after', tries, 'attempts');
-                return;
-            }
-
-            timerId = setTimeout(() => attempt(id, tries + 1), SKIP_RETRY_INTERVAL);
-        }
-
-        return function skip() {
-            clearTimeout(timerId);
-            const id = ++skipId;
-            attempt(id, 0);
+            console.log(`[ts.kg] skipping ad: jumping to ${target.toFixed(2)}s`);
+            player.currentTime(target);
+            skippedSrc = src;
         };
     }
 
@@ -93,32 +70,39 @@
         player.ready(() => {
             player.controls(true);
 
-            // 'play' fires at the start of each video (including each consecutive ad)
-            player.on('play', () => {
-                if (isAd(player)) {
-                    console.log('[ts.kg] ad detected on play');
+            // Check current state at attach time —
+            // first ad may have already started before our script was injected.
+            // readyState >= 1 (HAVE_METADATA) means duration is already known.
+            let metadataReady = player.readyState() >= 1;
+            let playFired = !player.paused();
+
+            function trySkip() {
+                if (metadataReady && playFired && isAd(player)) {
                     skip();
                 }
+            }
+
+            // Reset flags for every new video source
+            player.on('loadstart', () => {
+                metadataReady = false;
+                playFired = false;
                 player.controls(true);
             });
 
-            // 'loadedmetadata' fires when duration becomes available.
-            // Catches the case where 'play' fired before duration was known.
+            // Duration is guaranteed to be known here
             player.on('loadedmetadata', () => {
-                if (isAd(player) && !player.paused()) {
-                    console.log('[ts.kg] ad detected on loadedmetadata');
-                    skip();
-                }
+                metadataReady = true;
+                trySkip();
             });
 
-            // 'timeupdate' is a last-resort safety net — if the video is
-            // playing and we somehow missed both events above, skip it here.
-            player.on('timeupdate', () => {
-                if (isAd(player) && player.currentTime() < 1) {
-                    console.log('[ts.kg] ad detected on timeupdate');
-                    skip();
-                }
+            // Fires on autoplay or user interaction
+            player.on('play', () => {
+                playFired = true;
+                trySkip();
             });
+
+            // Handle the case where we attached mid-playback
+            trySkip();
         });
     }
 
@@ -137,7 +121,6 @@
             tryAttachPlayer();
         });
         observer.observe(document.documentElement, { childList: true, subtree: true });
-        return observer;
     }
 
     // --- Init ---
