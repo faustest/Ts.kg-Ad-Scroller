@@ -1,21 +1,62 @@
 'use strict';
 
 (function () {
-    // --- Config ---
-    const SELECTORS_TO_REMOVE = [
-        "div[id^='oops-branding']",
-        "div[class^='oops-']",
-        '#player-overlay',
-        '#player-blocker',
-        '#oops-footer',
-        '#cc7635be',
-        '#oopsf',
-        '[data-link*="https"][data-id]',
-        '[data-link][data-id]',
-    ];
 
-    const BG_COLOR = '#206e3e';
+    // --- Per-site config ---
+    const SITES = {
+        'ts.kg': {
+            bgColor: '#206e3e',
+            selectors: [
+                "div[id^='oops-branding']",
+                "div[class^='oops-']",
+                '#player-overlay',
+                '#player-blocker',
+                '#oops-footer',
+                '#cc7635be',
+                '#oopsf',
+                '[data-link*="https"][data-id]',
+                '[data-link][data-id]',
+            ],
+            removeContainerStyles: false,
+            hasVideoSkip: true,
+            playerName: 'player5',
+        },
+        'oc.kg': {
+            bgColor: '#206e3e',
+            selectors: [
+                '.oops-footer',
+                '.online_banner',
+                '.online_banner_m',
+                '.outside_img',
+                '.side_ad_m',
+                '.sidebanner',
+                // Player iframe ad elements
+                '#player-blocker',
+                '#player-overlay',
+                '.side_banner',
+                '.bottom_banner',
+            ],
+            removeContainerStyles: true,
+            hasVideoSkip: true,
+            playerName: 'my_video_1',
+        },
+    };
+
     const AD_MAX_DURATION = 60;
+
+    // --- Detect current site ---
+    function getSiteConfig() {
+        const host = location.hostname.replace(/^www\./, '');
+        for (const key of Object.keys(SITES)) {
+            if (host === key || host.endsWith('.' + key)) {
+                return SITES[key];
+            }
+        }
+        return null;
+    }
+
+    const config = getSiteConfig();
+    if (!config) return; // unknown site — do nothing
 
     // --- Helpers ---
     function removeAll(selector) {
@@ -23,7 +64,7 @@
     }
 
     function isAdSrc(src) {
-        return (src ?? '').includes('static');
+        return (src ?? '').includes('static') || (src ?? '').includes('/background/');
     }
 
     function isAdByDuration(player) {
@@ -37,10 +78,19 @@
 
     // --- DOM cleanup ---
     function cleanDOM() {
-        SELECTORS_TO_REMOVE.forEach(removeAll);
+        config.selectors.forEach(removeAll);
+
+        // Remove inline <style> tags that inject background images (in head or #container)
+        if (config.removeContainerStyles) {
+            document.querySelectorAll('#container > style, head > style').forEach(el => {
+                if (el.textContent.includes('background-image') && el.textContent.includes('/background/')) {
+                    el.remove();
+                }
+            });
+        }
     }
 
-    // --- Skip logic ---
+    // --- Video skip (ts.kg only) ---
     function makeSkipper(player) {
         let skippedSrc = null;
 
@@ -49,18 +99,25 @@
             if (src && src === skippedSrc) return;
 
             const dur = player.duration();
+            if (isNaN(dur) || dur <= 0) {
+                console.log('[ext] skip: duration not ready, waiting for loadedmetadata');
+                return;
+            }
+
             const remaining = player.remainingTime();
             const target = isNaN(remaining) ? dur : remaining;
 
-            console.log(`[ts.kg] skipping ad: jumping to ${target.toFixed(2)}s`);
+            console.log(`[ext] skipping ad: jumping to ${target.toFixed(2)}s`);
             player.currentTime(target);
             skippedSrc = src;
         };
     }
 
-    // --- Player setup ---
     function getPlayer() {
         if (typeof videojs === 'undefined' || !videojs.players) return null;
+        if (config.playerName && videojs.players[config.playerName]) {
+            return videojs.players[config.playerName];
+        }
         return Object.values(videojs.players).find(p => p != null) ?? null;
     }
 
@@ -70,9 +127,6 @@
         player.ready(() => {
             player.controls(true);
 
-            // Check current state at attach time —
-            // first ad may have already started before our script was injected.
-            // readyState >= 1 (HAVE_METADATA) means duration is already known.
             let metadataReady = player.readyState() >= 1;
             let playFired = !player.paused();
 
@@ -82,36 +136,33 @@
                 }
             }
 
-            // Reset flags for every new video source
             player.on('loadstart', () => {
                 metadataReady = false;
                 playFired = false;
                 player.controls(true);
             });
 
-            // Duration is guaranteed to be known here
             player.on('loadedmetadata', () => {
                 metadataReady = true;
                 trySkip();
             });
 
-            // Fires on autoplay or user interaction
             player.on('play', () => {
                 playFired = true;
                 trySkip();
             });
 
-            // Handle the case where we attached mid-playback
             trySkip();
         });
     }
 
     function tryAttachPlayer() {
+        if (!config.hasVideoSkip) return;
         const player = getPlayer();
         if (!player || player._tsExtAttached) return;
         player._tsExtAttached = true;
         setupPlayer(player);
-        console.log('[ts.kg] player attached');
+        console.log('[ext] player attached');
     }
 
     // --- MutationObserver ---
@@ -125,7 +176,9 @@
 
     // --- Init ---
     function init() {
-        if (document.body) document.body.style.background = BG_COLOR;
+        if (config.bgColor && document.body) {
+            document.body.style.background = config.bgColor;
+        }
         cleanDOM();
         tryAttachPlayer();
         observeDOM();
@@ -143,4 +196,6 @@
     } else {
         init();
     }
+
 })();
+// patch applied below via str_replace

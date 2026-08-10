@@ -1,19 +1,29 @@
 {
   "manifest_version": 3,
-  "name": "Ts.kg Ad Scroller",
-  "version": "1.0",
-  "description": "Removes ads and skips video ad breaks on ts.kg",
-  "permissions": ["scripting", "tabs"],
+  "name": "Ts.kg / Oc.kg Ad Scroller",
+  "version": "1.3",
+  "description": "Removes ads and skips video ad breaks on ts.kg and oc.kg",
+  "permissions": ["scripting", "tabs", "declarativeNetRequest"],
   "host_permissions": [
-    "https://*.ts.kg/*"
+    "https://*.ts.kg/*",
+    "https://*.oc.kg/*"
   ],
   "background": {
     "service_worker": "background.js"
   },
+  "declarative_net_request": {
+    "rule_resources": [
+      {
+        "id": "block_rules",
+        "enabled": true,
+        "path": "rules.json"
+      }
+    ]
+  },
   "web_accessible_resources": [
     {
       "resources": ["pageScript.js"],
-      "matches": ["https://*.ts.kg/*"]
+      "matches": ["https://*.ts.kg/*", "https://*.oc.kg/*"]
     }
   ],
   "icons": {
@@ -22,7 +32,7 @@
     "128": "icon128.png"
   },
   "action": {
-    "default_title": "Ts.kg Ad Scroller",
+    "default_title": "Ts.kg / Oc.kg Ad Scroller",
     "default_icon": {
       "16": "icon16.png",
       "48": "icon48.png",
