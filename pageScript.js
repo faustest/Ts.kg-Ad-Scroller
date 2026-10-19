@@ -35,6 +35,8 @@
                 '#player-overlay',
                 '.side_banner',
                 '.bottom_banner',
+                // Injected ad iframes
+                '[src^="/olol"]',
             ],
             removeContainerStyles: true,
             hasVideoSkip: true,
